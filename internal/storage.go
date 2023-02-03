@@ -72,14 +72,58 @@ func (es *EmployeeStorage) GetEmployee(id int) (Employee, error) {
 
 // DeleteEmployee удаляет работника с заданным ID. Если ID не существует -
 // будет возвращена ошибка.
-func (es *EmployeeStorage) DeleteEmployee(id int) error
+func (es *EmployeeStorage) DeleteEmployee(id int) error {
+	es.Lock()
+	defer es.Unlock()
+
+	if _, ok := es.employees[id]; !ok {
+		return fmt.Errorf("employee with id=%d not found", id)
+	}
+
+	delete(es.employees, id)
+	return nil
+}
 
 // DeleteAllEmployees удаляет из хранилища всех работников.
-func (es *EmployeeStorage) DeleteAllEmployees() error
+func (es *EmployeeStorage) DeleteAllEmployees() error {
+	es.Lock()
+	defer es.Unlock()
+
+	es.employees = make(map[int]Employee)
+	return nil
+}
 
 // GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
 // с указанной фамилией.
-func (es *EmployeeStorage) GetEmployeesByLastName(LastName string) []Employee
+func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) []Employee {
+	es.Lock()
+	defer es.Unlock()
+
+	var employees []Employee
+
+	for _, employee := range es.employees {
+		if employee.LastName == lastName {
+			employees = append(employees, employee)
+		}
+	}
+
+	return employees
+}
 
 // UpdateEmployee обновляет информацию о работнике.
-func (es *EmployeeStorage) UpdateEmployee(Id int, FirstName, LastName, Email string)
+func (es *EmployeeStorage) UpdateEmployee(id int, firstName, lastName, email string) error {
+	es.Lock()
+	defer es.Unlock()
+
+	if _, ok := es.employees[id]; !ok {
+		return fmt.Errorf("employee with id=%d not found", id)
+	}
+
+	es.employees[id] = Employee{
+		Id:        id,
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email}
+
+	return nil
+}

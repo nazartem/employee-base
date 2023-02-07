@@ -93,9 +93,9 @@ func (es *EmployeeStorage) DeleteAllEmployees() error {
 	return nil
 }
 
-// GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
-// с указанной фамилией.
-func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) []Employee {
+// // GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
+// // с указанной фамилией.
+func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) ([]Employee, error) {
 	es.Lock()
 	defer es.Unlock()
 
@@ -107,7 +107,11 @@ func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) []Employee {
 		}
 	}
 
-	return employees
+	if employees != nil {
+		return employees, nil
+	}
+
+	return nil, fmt.Errorf("employees with lasName=%s not found", lastName)
 }
 
 // UpdateEmployee обновляет информацию о работнике.

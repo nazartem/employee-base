@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"/home/nazaryap/go/employee-base/internal/storage"
+	"employee-base/storage"
 )
 
 type employeeServer struct {
@@ -54,21 +54,28 @@ func (es *employeeServer) employeeHandler(w http.ResponseWriter, req *http.Reque
 		fmt.Println(path) // удалить
 
 		if len(pathParts) < 2 {
-			http.Error(w, "expect /employee/<id> in employee handler", http.StatusBadRequest)
+			http.Error(w, "expect /employee/<id> or /employee/<lastName> in employee handler", http.StatusBadRequest)
 			return
 		}
 		id, err := strconv.Atoi(pathParts[1])
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			if req.Method == http.MethodGet {
+				es.lastNameHandler(w, req, pathParts[1])
+				return
+			} else {
+				http.Error(w, fmt.Sprintf("expect method GET at /employee/<lastName>, got %v", req.Method), http.StatusMethodNotAllowed)
+				return
+			}
 		}
 
 		if req.Method == http.MethodDelete {
 			es.deleteEmployeeHandler(w, req, int(id))
 		} else if req.Method == http.MethodGet {
 			es.getEmployeeHandler(w, req, int(id))
+		} else if req.Method == http.MethodPut {
+			es.updateEmployeeHandler(w, req, int(id))
 		} else {
-			http.Error(w, fmt.Sprintf("expect method GET or DELETE at /employee/<id>, got %v", req.Method), http.StatusMethodNotAllowed)
+			http.Error(w, fmt.Sprintf("expect method GET, DELETE or PUT at /employee/<id>, got %v", req.Method), http.StatusMethodNotAllowed)
 			return
 		}
 	}
@@ -146,28 +153,19 @@ func (es *employeeServer) deleteAllEmployeesHandler(w http.ResponseWriter, req *
 	es.storage.DeleteAllEmployees()
 }
 
-func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Request) {
+func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Request, lastName string) {
 	log.Printf("handling employee by lastName at %s\n", req.URL.Path)
 
-	if req.Method != http.MethodGet {
-		http.Error(w, fmt.Sprintf("expect method GET /employee/<lastName>, got %v", req.Method), http.StatusMethodNotAllowed)
+	employees, err := es.storage.GetEmployeesByLastName(lastName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /employee/<lastName> path", http.StatusBadRequest)
-		return
-	}
-	lastName := pathParts[1]
-
-	employees := es.storage.GetEmployeesByLastName(lastName)
 	renderJSON(w, employees)
 }
 
-// rework
-func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http.Request) {
+func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http.Request, id int) {
 	log.Printf("handling employee update at %s\n", req.URL.Path)
 
 	// Types used internally in this handler to (de-)serialize the request and
@@ -176,10 +174,6 @@ func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http
 		FirstName string `json:"firstName"`
 		LastName  string `json:"lastName"`
 		Email     string `json:"email"`
-	}
-
-	type ResponseId struct {
-		Id int `json:"id"`
 	}
 
 	// Enforce a JSON Content-Type.
@@ -202,8 +196,11 @@ func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http
 		return
 	}
 
-	id := es.storage.CreateEmployee(re.FirstName, re.LastName, re.Email)
-	renderJSON(w, ResponseId{Id: id})
+	err = es.storage.UpdateEmployee(id, re.FirstName, re.LastName, re.Email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 }
 
 func main() {

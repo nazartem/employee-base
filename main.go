@@ -2,13 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"mime"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"employee-base/internal/employee"
 
@@ -33,54 +31,6 @@ func renderJSON(w http.ResponseWriter, v interface{}) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(js)
-}
-
-func (es *employeeServer) employeeHandler(w http.ResponseWriter, req *http.Request) {
-	if req.URL.Path == "/employee/" {
-		// Запрос направлен к "/employee/", без идущего в конце ID.
-		if req.Method == http.MethodPost {
-			es.createEmployeeHandler(w, req)
-		} else if req.Method == http.MethodGet {
-			es.getAllEmployeesHandler(w, req)
-		} else if req.Method == http.MethodDelete {
-			es.deleteAllEmployeesHandler(w, req)
-		} else {
-			http.Error(w, fmt.Sprintf("expect method GET, DELETE or POST at /employee/, got %v", req.Method), http.StatusMethodNotAllowed)
-			return
-		}
-	} else {
-		// В запросе есть ID, выглядит он как "/employee/<id>".
-		path := strings.Trim(req.URL.Path, "/")
-		fmt.Println(path) // удалить
-		pathParts := strings.Split(path, "/")
-		fmt.Println(path) // удалить
-
-		if len(pathParts) < 2 {
-			http.Error(w, "expect /employee/<id> or /employee/<lastName> in employee handler", http.StatusBadRequest)
-			return
-		}
-		id, err := strconv.Atoi(pathParts[1])
-		if err != nil {
-			if req.Method == http.MethodGet {
-				es.lastNameHandler(w, req, pathParts[1])
-				return
-			} else {
-				http.Error(w, fmt.Sprintf("expect method GET at /employee/<lastName>, got %v", req.Method), http.StatusMethodNotAllowed)
-				return
-			}
-		}
-
-		if req.Method == http.MethodDelete {
-			es.deleteEmployeeHandler(w, req, int(id))
-		} else if req.Method == http.MethodGet {
-			es.getEmployeeHandler(w, req, int(id))
-		} else if req.Method == http.MethodPut {
-			es.updateEmployeeHandler(w, req, int(id))
-		} else {
-			http.Error(w, fmt.Sprintf("expect method GET, DELETE or PUT at /employee/<id>, got %v", req.Method), http.StatusMethodNotAllowed)
-			return
-		}
-	}
 }
 
 func (es *employeeServer) createEmployeeHandler(w http.ResponseWriter, req *http.Request) {
@@ -129,10 +79,14 @@ func (es *employeeServer) getAllEmployeesHandler(w http.ResponseWriter, req *htt
 	renderJSON(w, allEmployees)
 }
 
-func (es *employeeServer) getEmployeeHandler(w http.ResponseWriter, req *http.Request, id int) {
+func (es *employeeServer) getEmployeeHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling get employee at %s\n", req.URL.Path)
 
+	// Here and elsewhere, not checking error of Atoi because the router only
+	// matches the [0-9]+ regex.
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	employee, err := es.storage.GetEmployee(id)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -141,10 +95,12 @@ func (es *employeeServer) getEmployeeHandler(w http.ResponseWriter, req *http.Re
 	renderJSON(w, employee)
 }
 
-func (es *employeeServer) deleteEmployeeHandler(w http.ResponseWriter, req *http.Request, id int) {
+func (es *employeeServer) deleteEmployeeHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling delete employee at %s\n", req.URL.Path)
 
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err := es.storage.DeleteEmployee(id)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 	}
@@ -155,10 +111,12 @@ func (es *employeeServer) deleteAllEmployeesHandler(w http.ResponseWriter, req *
 	es.storage.DeleteAllEmployees()
 }
 
-func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Request, lastName string) {
+func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling employee by lastName at %s\n", req.URL.Path)
 
+	lastName := mux.Vars(req)["lastName"]
 	employees, err := es.storage.GetEmployeesByLastName(lastName)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -167,7 +125,7 @@ func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Reque
 	renderJSON(w, employees)
 }
 
-func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http.Request, id int) {
+func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling employee update at %s\n", req.URL.Path)
 
 	// Types used internally in this handler to (de-)serialize the request and
@@ -198,7 +156,9 @@ func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http
 		return
 	}
 
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err = es.storage.UpdateEmployee(id, re.FirstName, re.LastName, re.Email)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -214,8 +174,9 @@ func main() {
 	router.HandleFunc("/employee/", server.getAllEmployeesHandler).Methods("GET")
 	router.HandleFunc("/employee/", server.deleteAllEmployeesHandler).Methods("DELETE")
 	router.HandleFunc("/employee/{id:[0-9]+}/", server.getEmployeeHandler).Methods("GET")
-	router.HandleFunc("/task/{id:[0-9]+}/", server.deleteTaskHandler).Methods("DELETE")
-	router.HandleFunc("/tag/{tag}/", server.tagHandler).Methods("GET")
+	router.HandleFunc("/employee/{id:[0-9]+}/", server.deleteEmployeeHandler).Methods("DELETE")
+	router.HandleFunc("/employee/{id:[0-9]+}/", server.updateEmployeeHandler).Methods("PUT")
+	router.HandleFunc("/employee/{lastName}/", server.lastNameHandler).Methods("GET")
 
-	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), mux))
+	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), router))
 }

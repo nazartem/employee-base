@@ -76,8 +76,8 @@ func (es *EmployeeStorage) DeleteAllEmployees() error {
 	return nil
 }
 
-// // GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
-// // с указанной фамилией.
+// GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
+// с указанной фамилией.
 func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) ([]Employee, error) {
 	es.Lock()
 	defer es.Unlock()

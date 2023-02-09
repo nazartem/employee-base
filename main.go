@@ -10,15 +10,17 @@ import (
 	"strconv"
 	"strings"
 
-	"employee-base/storage"
+	"employee-base/internal/employee"
+
+	"github.com/gorilla/mux"
 )
 
 type employeeServer struct {
-	storage *storage.EmployeeStorage
+	storage *employee.EmployeeStorage
 }
 
 func NewEmployeeServer() *employeeServer {
-	storage := storage.New()
+	storage := employee.New()
 	return &employeeServer{storage: storage}
 }
 
@@ -204,9 +206,16 @@ func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http
 }
 
 func main() {
-	mux := http.NewServeMux()
+	router := mux.NewRouter()
+	router.StrictSlash(true)
 	server := NewEmployeeServer()
-	mux.HandleFunc("/employee/", server.employeeHandler)
+
+	router.HandleFunc("/employee/", server.createEmployeeHandler).Methods("POST")
+	router.HandleFunc("/employee/", server.getAllEmployeesHandler).Methods("GET")
+	router.HandleFunc("/employee/", server.deleteAllEmployeesHandler).Methods("DELETE")
+	router.HandleFunc("/employee/{id:[0-9]+}/", server.getEmployeeHandler).Methods("GET")
+	router.HandleFunc("/task/{id:[0-9]+}/", server.deleteTaskHandler).Methods("DELETE")
+	router.HandleFunc("/tag/{tag}/", server.tagHandler).Methods("GET")
 
 	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), mux))
 }

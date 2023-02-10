@@ -10,6 +10,7 @@ import (
 
 	"employee-base/internal/employee"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -177,6 +178,12 @@ func main() {
 	router.HandleFunc("/employee/{id:[0-9]+}/", server.deleteEmployeeHandler).Methods("DELETE")
 	router.HandleFunc("/employee/{id:[0-9]+}/", server.updateEmployeeHandler).Methods("PUT")
 	router.HandleFunc("/employee/{lastName}/", server.lastNameHandler).Methods("GET")
+
+	// Set up logging and panic recovery middleware.
+	router.Use(func(h http.Handler) http.Handler {
+		return handlers.LoggingHandler(os.Stdout, h)
+	})
+	router.Use(handlers.RecoveryHandler(handlers.PrintRecoveryStack(true)))
 
 	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), router))
 }

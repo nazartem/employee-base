@@ -67,15 +67,6 @@ func (es *EmployeeStorage) DeleteEmployee(id int) error {
 	return nil
 }
 
-// DeleteAllEmployees удаляет из хранилища всех работников.
-func (es *EmployeeStorage) DeleteAllEmployees() error {
-	es.Lock()
-	defer es.Unlock()
-
-	es.employees = make(map[int]Employee)
-	return nil
-}
-
 // GetEmployeesByLastName возвращает, в произвольном порядке, всех работников
 // с указанной фамилией.
 func (es *EmployeeStorage) GetEmployeesByLastName(lastName string) ([]Employee, error) {

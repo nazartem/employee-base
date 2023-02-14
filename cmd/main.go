@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"log"
 	"mime"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"strconv"
 
 	"employee-base/internal/employee"
+	"employee-base/internal/middleware"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -107,11 +110,6 @@ func (es *employeeServer) deleteEmployeeHandler(w http.ResponseWriter, req *http
 	}
 }
 
-func (es *employeeServer) deleteAllEmployeesHandler(w http.ResponseWriter, req *http.Request) {
-	log.Printf("handling delete all employee at %s\n", req.URL.Path)
-	es.storage.DeleteAllEmployees()
-}
-
 func (es *employeeServer) lastNameHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling employee by lastName at %s\n", req.URL.Path)
 
@@ -167,23 +165,38 @@ func (es *employeeServer) updateEmployeeHandler(w http.ResponseWriter, req *http
 }
 
 func main() {
+	certFile := flag.String("certfile", "cert.pem", "certificate PEM file")
+	keyFile := flag.String("keyfile", "key.pem", "key PEM file")
+	flag.Parse()
+
 	router := mux.NewRouter()
 	router.StrictSlash(true)
 	server := NewEmployeeServer()
 
-	router.HandleFunc("/employee/", server.createEmployeeHandler).Methods("POST")
+	// The "create", "update" and "delete" paths are protected with the BasicAuth middleware.
+	router.Handle("/employee/", middleware.BasicAuth(http.HandlerFunc(server.createEmployeeHandler))).Methods("POST") //
 	router.HandleFunc("/employee/", server.getAllEmployeesHandler).Methods("GET")
-	router.HandleFunc("/employee/", server.deleteAllEmployeesHandler).Methods("DELETE")
 	router.HandleFunc("/employee/{id:[0-9]+}/", server.getEmployeeHandler).Methods("GET")
-	router.HandleFunc("/employee/{id:[0-9]+}/", server.deleteEmployeeHandler).Methods("DELETE")
-	router.HandleFunc("/employee/{id:[0-9]+}/", server.updateEmployeeHandler).Methods("PUT")
+	router.Handle("/employee/{id:[0-9]+}/", middleware.BasicAuth(http.HandlerFunc(server.deleteEmployeeHandler))).Methods("DELETE") //
+	router.Handle("/employee/{id:[0-9]+}/", middleware.BasicAuth(http.HandlerFunc(server.updateEmployeeHandler))).Methods("PUT")    //
 	router.HandleFunc("/employee/{lastName}/", server.lastNameHandler).Methods("GET")
 
-	// Set up logging and panic recovery middleware.
+	// Set up logging and panic recovery middleware for all paths.
 	router.Use(func(h http.Handler) http.Handler {
 		return handlers.LoggingHandler(os.Stdout, h)
 	})
 	router.Use(handlers.RecoveryHandler(handlers.PrintRecoveryStack(true)))
 
-	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), router))
+	addr := "localhost:" + os.Getenv("SERVERPORT")
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: router,
+		TLSConfig: &tls.Config{
+			MinVersion:               tls.VersionTLS13,
+			PreferServerCipherSuites: true,
+		},
+	}
+
+	log.Printf("Starting server on %s", addr)
+	log.Fatal(srv.ListenAndServeTLS(*certFile, *keyFile))
 }
